@@ -1,0 +1,19 @@
+﻿on:
+  push:
+    branches:
+      - main
+        
+  pull_request:
+    branches: 
+      - main
+  
+  workflow_dispatch:
+    inputs:
+      deploy:
+        type: 'boolean'
+        default: false
+        
+jobs:
+  RunTest:
+    uses: ./.github/workflows/support.run-unit-tests.yaml
+    secrets: inherit

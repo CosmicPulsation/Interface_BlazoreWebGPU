@@ -1,0 +1,56 @@
+name: Run Tests
+
+on:
+  workflow_call:
+
+env:
+  BuildLocation: './Clients/NuGet.Functions/NuGet.Functions.csproj'
+  
+jobs:
+  reusable_workflow_job:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: FindInfrastructurePath
+        shell: pwsh
+        run: |
+          $rootPath = git rev-parse --show-toplevel
+          $path = (Get-ChildItem -path "$rootPath" -Filter "*.sln" | Select-Object -ExpandProperty FullName).Path
+          Write-Output "Path=$($path)" >> $Env:GITHUB_OUTPUT
+        id: SolutionPath
+
+      - name: Install Nuget Feed
+        shell: pwsh
+        run: dotnet nuget add source ${{ vars.NUGET_SOURCE }} --name PrivateFeed --username "${{ vars.NUGET_FEED_USER_NAME }}" --password "${{ secrets.NUGET_FEED_PASSWORD }}" --store-password-in-clear-text
+      
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build "${{ steps.SolutionPath.outputs.Path }}" --configuration Release --no-restore --force
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build --verbosity normal
+        
+      - name: FindInfrastructurePath
+        shell: pwsh
+        run: |
+          $path = (Resolve-Path -path ".\.github\bin\Release\net*").Path
+          Write-Output "Path=$($path)" >> $Env:GITHUB_OUTPUT
+        id: SetupBuildPath
+
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+      - name: PreDeployValidation
+        shell: pwsh
+        run: ${{ steps.SetupBuildPath.outputs.Path }}\PowerShell\PreDeployValidation.ps1
